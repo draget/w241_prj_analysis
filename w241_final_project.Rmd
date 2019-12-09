@@ -1,0 +1,376 @@
+---
+title: "w241_final_project"
+output: html_document
+---
+
+```{r,message=FALSE,error=FALSE}
+library(stringr)
+library(dplyr)
+library(stargazer)
+library(lmtest)
+library(sandwich)
+library(ggplot2)
+library(magrittr)
+library(lmtest)
+library(ri2)
+library(data.table)
+```
+
+## Loading Data
+
+```{r,message=FALSE,error=FALSE}
+d = read.csv('~/Desktop/PrelimRESULTS.csv')
+#g1 = read.csv('~/Desktop/group1.csv')
+#g2_sms = read.csv('~/Desktop/group2_SMS.csv')
+#g2_no_sms = read.csv('~/Desktop/group2_NoSMS.csv')
+s_prior = read.csv('~/Desktop/scripts_prior.csv')
+s_during = read.csv('~/Desktop/scripts_during.csv')
+```
+
+## Examine data
+
+```{r, include=FALSE}
+# # How many users in the final data set? 
+# which(duplicated(d$UniqueID))
+# # there are duplicated records in the final data set
+# 
+# d[d$UniqueID %in% d$UniqueID[duplicated(d$UniqueID)],]
+# # maybe we should merge the duplicated rows? by summing the drug count? 
+# 
+# # Join to assignment file
+# df = d[,c('UniqueID','ACTIVE_IN._EXPERIMENT','TREATMENT','EXCLUDE')] %>%
+#   filter(is.na(d$EXCLUDE))
+# group1 = data.frame(UniqueID = g1$UniqueID, group = 'group_1', treatment = g1$Tr)
+# group2_sms = data.frame(UniqueID = g2_sms$UniqueID, group = 'group_2_sms', treatment = g2_sms$Tr)
+# group2_no_sms = data.frame(UniqueID = g2_no_sms$UniqueID, group = 'group_2_no_sms', treatment = g2_no_sms$Tr)
+# 
+# assignment = rbind(group1, group2_no_sms, group2_sms)
+# df_1 = full_join(df, assignment)
+# 
+# nrow(filter(d, d$TREATMENT != '')) #185
+# nrow(assignment) #156
+# # There are more users in the final doc than the assignment groups... 
+```
+
+## Combining the PrelimRESULTS table with the two scripts table using left join.
+
+```{r}
+# clean the final data file
+df = d %>%
+  transmute(id = UniqueID,
+            treatment = ifelse(TREATMENT == '', '', ifelse(str_detect(TREATMENT,'CONTROL'), 0, 1)),
+            group = ifelse(TREATMENT == '', '', ifelse(str_detect(TREATMENT,'GROUP 1'), 'No Phone', ifelse(str_detect(TREATMENT,'NO SMS'), 'No SMS', 'SMS'))),
+            active_in_exp = ifelse(is.na(ACTIVE_IN._EXPERIMENT), 0, 1),
+            active_3m = X3MONTH_ACTIVE, 
+            voucher = ifelse(VOUCHER == '', 0, 1), 
+            drug_count = Drug.Count,
+            nov05_fail = ifelse(is.na(Nov05_FAIL), 0, 1),
+            nov13_fail = ifelse(is.na(Nov13_FAIL), 0, 1),
+            nov23_fail = ifelse(is.na(Nov23_FAIL), 0, 1),
+            unsub = ifelse(Unsubscribe_Request == '', 0, 1), 
+            msg_fail = ifelse(is.na(Other_msg_fail), 0, 1),
+            nursing_home = ifelse(is.na(Nursing_HOME), 0, 1),
+            male = ifelse(is.na(MALE), 0, 1),
+            reminder_type = Reminder.Type,
+            address_group = Address.GROUP,
+            carer_group = ifelse(is.na(CARER.GROUP), 0, 1),
+            cell_phone = HAS_CELL_PHONE,
+            email = HAS_EMAIL,
+            cell_dup = ifelse(is.na(CELL_DUP_GP), 0, 1),
+            name_dup = ifelse(is.na(NAME_DUP_GP), 0, 1)
+            ) %>%
+  filter(treatment != '') %>%
+  filter(!duplicated(id)) # removing duplicated row, because some users converted reminder type half way through the experiment
+
+s_p = s_prior %>% 
+  transmute(
+    id = UNIQUE.ID,
+    date = DATE,
+    total_meds = Medications.ordered,
+    self_meds = Ordered.for.self,
+    other_meds = ORDERED.FOR.OTHER) %>%
+  filter(as.Date(s_prior$DATE,'%d/%m/%Y') >= as.Date('5/8/2019','%d/%m/%Y')) %>% # filter for prior three month only
+  group_by(id) %>%
+  summarise(
+    total_meds_3m = sum(total_meds),
+    self_meds_3m = sum(self_meds),
+    other_meds_3m = sum(other_meds)
+  )
+
+s_d = s_during %>% 
+  transmute(
+    id = UNIQUE.ID,
+    date = DATE,
+    total_meds = Medications.ordered,
+    self_meds = Ordered.for.self,
+    other_meds = ORDERED.FOR.OTHER) %>%
+  group_by(id) %>%
+  summarise(
+    total_meds_in_exp = sum(total_meds),
+    self_meds_in_exp = sum(self_meds),
+    other_meds_in_exp = sum(other_meds)
+  )
+
+df = df %>% 
+  left_join(.,s_p) %>%
+  left_join(.,s_d) %>% data.table()
+```
+
+## Hypothesis 0: treatment effect, y = active login, x = treatment
+
+### Random Inference: active login in exp ~ treatment, without correcting for clustered standard error
+```{r, error= FALSE, message= FALSE}
+# Define potential outcomes for control and treatment, under the sharp null hypothesis, these two vectors should be exactly the same
+
+# Assign treatment and control potential outcomes
+po.control = as.integer(df$active_in_exp)
+po.treatment = po.control
+
+# Randomly assign units into control and treatment group
+randomize = function() {sample(c(rep(0,sum(df$treatment == 0)),rep(1,sum(df$treatment == 1))))}
+t = randomize()
+
+# Calculate the outcome according to control/treatment assignment
+outcomes = po.treatment * t + po.control*(1-t)
+
+# Estimate the Average Treatment Effect
+est.ate = function(outcome,success){mean(outcome[success==1]) - mean(outcome[success==0])}
+#est.ate(outcomes, randomize())
+
+# Run simulation for 10,000 times
+distribution.under.sharp.null <- replicate(10000, est.ate(outcomes, randomize()))
+
+ATE = mean(as.numeric(df[df$treatment == 1]$active_in_exp)) - mean(as.numeric(df[df$treatment == 0]$active_in_exp))
+p_value_two_tailed <- sum(abs(distribution.under.sharp.null) > ATE)/length(distribution.under.sharp.null)
+
+qplot(distribution.under.sharp.null) +
+ geom_vline(aes(xintercept = ATE,color = 'ATE')) + 
+  ggtitle(paste('Model: active in experiment ~ treatment, ATE = ', round(ATE,4), ', p-value = ', p_value_two_tailed))
+```
+
+```{r}
+table(df$group, df$active_in_exp)
+
+lm0 = df[,lm(active_in_exp ~ treatment)] # base model
+lm0$vcovCL1 = vcovCL(lm0, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm0, vcov. = lm0$vcovCL1)
+
+lm3 = df[,lm(active_in_exp ~ group)] # base model
+lm3$vcovCL1 = vcovCL(lm3, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm3, vcov. = lm3$vcovCL1)
+
+lm1 = df[,lm(active_in_exp ~ group + treatment)] # base model + group 
+lm1$vcovCL1 = vcovCL(lm1, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm1, vcov. = lm1$vcovCL1)
+
+lm2 = df[,lm(active_in_exp ~ group + treatment + active_3m )] # base model + group + active_3m
+lm2$vcovCL1 = vcovCL(lm2, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm2, vcov. = lm2$vcovCL1)
+
+stargazer(lm0, lm3, lm1, lm2, 
+          se = list(sqrt(diag(lm0$vcovCL1)),
+                    sqrt(diag(lm3$vcovCL1)),
+                    sqrt(diag(lm1$vcovCL1)),
+                    sqrt(diag(lm2$vcovCL1))), 
+          type = 'text', header = FALSE, 
+          omit.stat = c('F', 'ser')
+)
+```
+
+- ATE is the same between RI and t-test, however, t-test uses clustered standard error. 
+- Treatment effect is not significant.
+- Seems like which group the user is assigned to is more important
+- Whether the user is active during the test period is highly correlated with whether he/she was active in the app three months before the experiment.
+- Without explicitly specifying active_3m, being in either the No SMS and SMS is significant in predictinve active during experiment. 
+- Once active_3m is added, being in the SMS group is no longer significant. Is this a sign of covariate imbalance?
+
+## Hypothesis 1: differential treatment effect by group, y = active login, x = treatment
+
+```{r}
+lm1 = df[group == 'No Phone', lm(active_in_exp ~ treatment)] # base model
+lm1$vcovCL1 = vcovCL(lm1, cluster = df[group == 'No Phone', c("carer_group", "address_group")])
+#coeftest(lm1, vcov. = lm1$vcovCL1)
+
+lm2 = df[group == 'No Phone',lm(active_in_exp ~ treatment + active_3m)] # add active history
+lm2$vcovCL1 = vcovCL(lm2, cluster = df[group == 'No Phone', c("carer_group", "address_group")])
+#coeftest(lm2, vcov. = lm2$vcovCL1)
+
+lm3 = df[group == 'No SMS', lm(active_in_exp ~ treatment)] # base model
+lm3$vcovCL1 = vcovCL(lm3, cluster = df[group == 'No SMS', c("carer_group", "address_group")])
+#coeftest(lm3, vcov. = lm3$vcovCL1)
+
+lm4 = df[group == 'No SMS', lm(active_in_exp ~ treatment + active_3m)] # add active history
+lm4$vcovCL1 = vcovCL(lm4, cluster = df[group == 'No SMS', c("carer_group", "address_group")])
+#coeftest(lm4, vcov. = lm4$vcovCL1)
+
+lm5 = df[group == 'SMS', lm(active_in_exp ~ treatment)] # base model
+lm5$vcovCL1 = vcovCL(lm5, cluster = df[group == 'SMS', c("carer_group", "address_group")])
+#coeftest(lm5, vcov. = lm5$vcovCL1)
+
+lm6 = df[group == 'SMS', lm(active_in_exp ~ treatment + active_3m)] # add active history
+lm6$vcovCL1 = vcovCL(lm6, cluster = df[group == 'SMS', c("carer_group", "address_group")])
+#coeftest(lm6, vcov. = lm6$vcovCL1)
+
+stargazer(lm1, lm3, lm5,
+         se=list(sqrt(diag(lm1$vcovCL1)),
+                 sqrt(diag(lm3$vcovCL1)),
+                 sqrt(diag(lm5$vcovCL1))),
+         type = 'text',header=FALSE,
+         column.labels = c('No Phone','No SMS', 'SMS'))
+```
+
+- No evidence of differential treatment effect, as in treatment effect in all three groups are insignificant. 
+
+```{r}
+stargazer(lm2, lm4, lm6,
+         se=list(sqrt(diag(lm2$vcovCL1)),
+                 sqrt(diag(lm4$vcovCL1)),
+                 sqrt(diag(lm6$vcovCL1))),
+         type = 'text',header=FALSE,
+         column.labels = c('No Phone','No SMS', 'SMS'), 
+          omit.stat = c('F', 'ser')
+         )
+```
+
+- Why did the SE for No SMS treatment group disappear??? it's because of the clustered SE, but why? 
+
+
+## Hypothesis 2: reminder effect on voucher uptake, y = voucher, x = group
+
+### Random Inference: voucher ~ reminder, without correcting for clustered standard error
+```{r, error= FALSE, message= FALSE}
+# Define potential outcomes for control and treatment, under the sharp null hypothesis, these two vectors should be exactly the same
+
+df$reminder = ifelse(df$group == 'SMS', 1, 0)
+
+# Assign treatment and control potential outcomes
+po.control = as.integer(df$voucher)
+po.treatment = po.control
+
+# Randomly assign units into control and treatment group
+randomize = function() {sample(c(rep(0,sum(df$reminder == 0)),rep(1,sum(df$reminder == 1))))}
+t = randomize()
+
+# Calculate the outcome according to control/treatment assignment
+outcomes = po.treatment * t + po.control*(1-t)
+
+# Estimate the Average Treatment Effect
+est.ate = function(outcome,success){mean(outcome[success==1]) - mean(outcome[success==0])}
+#est.ate(outcomes, randomize())
+
+# Run simulation for 10,000 times
+distribution.under.sharp.null <- replicate(10000, est.ate(outcomes, randomize()))
+
+ATE = mean(as.numeric(df[df$reminder == 1]$voucher)) - mean(as.numeric(df[df$reminder == 0]$voucher))
+p_value_two_tailed <- sum(abs(distribution.under.sharp.null) > ATE)/length(distribution.under.sharp.null)
+
+qplot(distribution.under.sharp.null) +
+ geom_vline(aes(xintercept = ATE,color = 'ATE')) + 
+ ggtitle(paste('Model: voucher ~ reminder, ATE = ', round(ATE,4), ', p-value = ', p_value_two_tailed))
+```
+
+```{r}
+table(df$group, df$voucher)
+
+lm1 = df[, lm(voucher ~ group - 1)] # base model
+lm1$vcovCL1 = vcovCL(lm1, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm1, vcov. = lm1$vcovCL1)
+
+lm2 = df[, lm(voucher ~ group - 1)]
+lm2$vcovHC_ <- vcovHC(lm2)
+#coeftest(lm2, vcov. = lm2$vcovHC_)
+
+stargazer(lm1, lm2, 
+          se = list(sqrt(diag(lm1$vcovCL1)),
+                    sqrt(diag(lm2$vcovHC_))), 
+          type = 'text', header = FALSE,
+         column.labels = c('Clustered SE','Robust SE'), 
+          omit.stat = c('F', 'ser')
+          )
+```
+
+- reminder = 1 is equivalent to being in the SMS group, reminder = 0 means the user is either in the No Phone or No SMS group.
+- Using the clustered SE, the result becomes counterintuitive... 
+- clustered SE really shrinks the CI for No Phone and No SMS groups.
+
+## Hypothesis 3: treatment effect on scripts ordered, y = scripts ordered, x = treatment
+
+```{r}
+df$total_meds_in_exp = as.integer(ifelse(is.na(df$total_meds_in_exp),0,df$total_meds_in_exp)) # need to fill the NAs
+ggplot(data=df, aes(x = as.numeric(total_meds_in_exp), fill = treatment)) + 
+  geom_histogram(position="dodge")
+```
+
+- Highly skeweed distribution, normality assumption probably won't hold given the sample size
+
+```{r}
+table(df$treatment, df$total_meds_in_exp)
+
+lm0 = df[, lm(total_meds_in_exp ~ treatment)] # base model
+lm0$vcovCL1 = vcovCL(lm0, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm0, vcov. = lm0$vcovCL1)
+
+lm1 = df[, lm(total_meds_in_exp ~ treatment + total_meds_3m)] # base model + scripts 3m
+lm1$vcovCL1 = vcovCL(lm1, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm1, vcov. = lm1$vcovCL1)
+
+lm2 = df[, lm(total_meds_in_exp ~ treatment + group + total_meds_3m)] # base model + group
+lm2$vcovCL1 = vcovCL(lm2, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm2, vcov. = lm2$vcovCL1)
+
+lm4 = df[, lm(total_meds_in_exp ~ treatment + voucher + total_meds_3m)] # base model + voucher
+lm4$vcovCL1 = vcovCL(lm4, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm4, vcov. = lm4$vcovCL1)
+
+lm5 = df[, lm(total_meds_in_exp ~ treatment + group + total_meds_3m + voucher )] # base model + group + scripts 3m + voucher
+lm5$vcovCL1 = vcovCL(lm5, cluster = df[, c("carer_group", "address_group")])
+#coeftest(lm5, vcov. = lm5$vcovCL1)
+
+stargazer(lm0, lm1, lm2, lm4, lm5,
+          se = list(sqrt(diag(lm0$vcovCL1)),
+                    sqrt(diag(lm1$vcovCL1)),
+                    sqrt(diag(lm2$vcovCL1)),
+                    sqrt(diag(lm4$vcovCL1)),
+                    sqrt(diag(lm5$vcovCL1))), 
+          type = 'text', header = FALSE, 
+          omit.stat = c('F', 'ser')
+          )
+```
+
+- Being in the treatment group is not predictive of total meds ordered during the experiment
+- Power user effect: total meds ordered in the past 3 months is highly predictive of total meds ordered during the experiment
+- Having redeemed the voucher produces positive impact on total meds ordered
+- WOW is that last model the winner? having No Phone means significant negative impact on meds ordered through the app (denoted by the negative constant term). Redeeming the voucher, having SMS, and having No SMS, all show significant positive impact. feels too good to be true... 
+
+### Random Inference: total meds ordered in exp ~ treatment, without correcting for clustered standard error
+```{r, error= FALSE, message= FALSE}
+# Define potential outcomes for control and treatment, under the sharp null hypothesis, these two vectors should be exactly the same
+df = na.fill(df,0) %>% data.table()
+
+# Assign treatment and control potential outcomes
+po.control = as.integer(df$total_meds_in_exp)
+po.treatment = po.control
+
+# Randomly assign units into control and treatment group
+randomize = function() {sample(c(rep(0,sum(df$treatment == 0)),rep(1,sum(df$treatment == 1))))}
+t = randomize()
+
+# Calculate the outcome according to control/treatment assignment
+outcomes = po.treatment * t + po.control*(1-t)
+
+# Estimate the Average Treatment Effect
+est.ate = function(outcome,success){mean(outcome[success==1]) - mean(outcome[success==0])}
+#est.ate(outcomes, randomize())
+
+# Run simulation for 10,000 times
+distribution.under.sharp.null <- replicate(10000, est.ate(outcomes, randomize()))
+
+ATE = mean(as.numeric(df[df$treatment == 1]$total_meds_in_exp)) - mean(as.numeric(df[df$treatment == 0]$total_meds_in_exp))
+p_value_two_tailed <- sum(abs(distribution.under.sharp.null) > ATE)/length(distribution.under.sharp.null)
+
+qplot(distribution.under.sharp.null) +
+ geom_vline(aes(xintercept = ATE,color = 'ATE')) + 
+  ggtitle(paste('Model: total meds in experiment ~ treatment, ','ATE = ', round(ATE,4), ', p-value = ', p_value_two_tailed))
+```
+
+- ATE is the same between RI and t-test, however, t-test uses clustered standard error. 
