@@ -15,20 +15,22 @@ library(sandwich)
 library(ggplot2)
 library(magrittr)
 library(lmtest)
-library(ri2)
+# install.packages(c('ri2','tidyr','RItools'))
+# library(ri2)
 library(data.table)
 library(tidyr)
+library(RItools)
 ```
 
 ## Loading Data
 
 ```{r,message=FALSE,error=FALSE}
-d = read.csv('~/Desktop/PrelimRESULTS.csv')
+d = read.csv('PrelimRESULTS.csv')
 #g1 = read.csv('~/Desktop/group1.csv')
 #g2_sms = read.csv('~/Desktop/group2_SMS.csv')
 #g2_no_sms = read.csv('~/Desktop/group2_NoSMS.csv')
-s_prior = read.csv('~/Desktop/scripts_prior.csv')
-s_during = read.csv('~/Desktop/scripts_during.csv')
+s_prior = read.csv('scripts_prior.csv')
+s_during = read.csv('scripts_during.csv')
 ```
 
 ## Examine data
@@ -153,7 +155,6 @@ group_assignment
 Note that I used carer_group_i and address_group_i to check covariate balance. I couldn't use the original variables, because the id's were interpretated as numeric. So I had to create these two binary dummy variable.
 
 ```{r}
-library(RItools)
 df$treatment = as.integer(df$treatment)
 df$sms = as.integer(df$treatment)
 
