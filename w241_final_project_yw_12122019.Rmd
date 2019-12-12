@@ -24,12 +24,12 @@ library(RItools)
 ## Loading Data
 
 ```{r,message=FALSE,error=FALSE}
-d = read.csv('~/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv')
+d = read.csv('~/Desktop/w241_prj_analysis/PrelimRESULTSTD.csv')
 #g1 = read.csv('~/Desktop/group1.csv')
 #g2_sms = read.csv('~/Desktop/group2_SMS.csv')
 #g2_no_sms = read.csv('~/Desktop/group2_NoSMS.csv')
-s_prior = read.csv('~/w241/prj/w241_prj_analysis/scripts_priorTD.csv')
-s_during = read.csv('~/w241/prj/w241_prj_analysis/scripts_duringTD.csv')
+s_prior = read.csv('~/Desktop/w241_prj_analysis/scripts_priorTD.csv')
+s_during = read.csv('~/Desktop/w241_prj_analysis/scripts_duringTD.csv')
 ```
 
 ## Examine data
@@ -79,7 +79,7 @@ s_p = s_prior %>%
     total_meds = Medications.ordered,
     self_meds = Ordered.for.self,
     other_meds = ORDERED.FOR.OTHER) %>%
-  filter(as.Date(s_prior$DATE,'%d/%m/%Y') >= as.Date('5/8/2019','%d/%m/%Y')) %>% # filter for prior three month only
+  filter(as.Date(s_prior$DATE,'%d/%m/%y') >= as.Date('5/8/2019','%d/%m/%Y')) %>% # filter for prior three month only
   group_by(id) %>%
   summarise(
     total_meds_3m = sum(total_meds)/3,
@@ -109,7 +109,7 @@ df = d %>%
             phone = ifelse(TREATMENT == '', '', ifelse(str_detect(TREATMENT,'GROUP 1'), 0, 1)),
             sms = ifelse(TREATMENT == '', '', ifelse(str_detect(TREATMENT,'GROUP 1'), 0, ifelse(str_detect(TREATMENT,'NO SMS'),0,1))),
             active_in_exp = ifelse(is.na(ACTIVE_IN._EXPERIMENT), 0, 1),
-            active_3m = ifelse(is.na(X3MONTH_ACTIVE.NEW.), 0, 1), # Use the new column!  
+            active_3m = X3MONTH_ACTIVE.NEW., # Use the new column!  
             voucher = ifelse(VOUCHER == '', 0, 1), 
             drug_count = ifelse(is.na(Drug.Count), 0, 1),
             nov05_fail = ifelse(is.na(Nov05_FAIL), 0, 1),
@@ -202,7 +202,9 @@ p_value_two_tailed <- sum(abs(distribution.under.sharp.null) > ATE)/length(distr
 
 qplot(distribution.under.sharp.null) +
  geom_vline(aes(xintercept = ATE,color = 'ATE')) + 
-  ggtitle(paste('Model: active in experiment ~ treatment, ATE = ', round(ATE,4), ', p-value = ', p_value_two_tailed))
+  ggtitle(paste('Model: active in experiment ~ treatment, ATE = ', round(ATE,4), ', p-value = ', p_value_two_tailed)) + 
+  ylab('Sampling Simulation') + 
+  xlab('Distribution Under the Sharp Null Hypothesis')
 ```
 
 ### Overall model, not splitting by 'Has Phone' vs. 'No Phone'
