@@ -1,7 +1,8 @@
 library(lmtest)
 
 
-d = read.csv("/home/draget/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv")
+#d = read.csv("/home/draget/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv")
+d = read.csv("C:\\Users\\uclj\\Downloads\\w241_prj_analysis-master\\PrelimRESULTSTD.csv")
 
 # Get rid of the lines which were not allocated to a treatment/control group.
 d = d[d$TREATMENT != "", ]
@@ -14,12 +15,39 @@ d$VOUCHER[is.na(d$VOUCHER)] = 0
 # Cleanup independents.
 d$MALE[is.na(d$MALE)] = 0
 
+cg = 100
+for(i in 1:nrow(d)) {
+  if(is.na(d[i, "CARER.GROUP"])) {
+    d[i, "CARER.GROUP"] = cg
+    cg = cg + 1
+  }
+}
+
+d$CARER.GROUP = factor(d$CARER.GROUP)
+d$MALE = factor(d$MALE)
+d$Address.GROUP = factor(d$Address.GROUP)
+
+
+special_sum = function(x) {
+  
+  if(is.factor(x)) {
+    return(x[1])
+  }
+  else {
+    return(sum(x))
+  }
+  
+}
+
+d = aggregate(d, by = list(d$CARER.GROUP), FUN = special_sum)
+
 # Create derived dummys.
 d$DiscountTreatment = d$TREATMENT == "GROUP 1 TREATMENT" | d$TREATMENT == "Tr1.1 SMS & TREATMENT" | d$TREATMENT == "Tr2.1 NO SMS TREATMENT"
 d$SMS = d$TREATMENT == "Tr1.0 SMS & CONTROL" | d$TREATMENT == "Tr1.1 SMS & TREATMENT"
-d$Conversion = d$ACTIVE_IN._EXPERIMENT == 1 & d$X3MONTH_ACTIVE == 0
-d$DropOut = d$ACTIVE_IN._EXPERIMENT == 0 & d$X3MONTH_ACTIVE == 1
-d$Consistent = d$ACTIVE_IN._EXPERIMENT == 1 & d$X3MONTH_ACTIVE == 1
+d$Conversion = d$ACTIVE_IN._EXPERIMENT == 1 & d$X3MONTH_ACTIVE.NEW. == 0
+d$DropOut = d$ACTIVE_IN._EXPERIMENT == 0 & d$X3MONTH_ACTIVE.NEW. == 1
+d$Consistent = d$ACTIVE_IN._EXPERIMENT == 1 & d$X3MONTH_ACTIVE.NEW. == 1
+
 
 # Unexpected result - No SMS group appears to have done significantly better in terms of activity.
 # Are our SMS offputting? (not consistent with lm6) 
@@ -53,7 +81,7 @@ lm7 = lm(Consistent ~ SMS + DiscountTreatment, data = d)
 coeftest(lm7)
 
 # Users before seem to be users after at 66% rate (significant).
-lm8 = lm(ACTIVE_IN._EXPERIMENT ~ X3MONTH_ACTIVE + SMS + DiscountTreatment, data = d)
+lm8 = lm(ACTIVE_IN._EXPERIMENT ~ X3MONTH_ACTIVE.NEW. + SMS + DiscountTreatment, data = d)
 coeftest(lm8)
 
 # For those in discount group, no significant improvement with SMS.
@@ -71,5 +99,5 @@ lm11 = lm(Consistent ~ MALE, data = d)
 coeftest(lm11)
 
 # Similar finding to above 2.
-lm12 = lm(ACTIVE_IN._EXPERIMENT ~ X3MONTH_ACTIVE + SMS + DiscountTreatment + MALE + DiscountTreatment*MALE, data = d)
+lm12 = lm(ACTIVE_IN._EXPERIMENT ~ X3MONTH_ACTIVE.NEW. + SMS + DiscountTreatment + MALE + DiscountTreatment*MALE, data = d)
 coeftest(lm12)
