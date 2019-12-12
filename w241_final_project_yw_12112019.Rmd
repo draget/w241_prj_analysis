@@ -1,8 +1,8 @@
 ---
 title: "w241_final_project"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
   word_document: default
 ---
 
@@ -156,7 +156,7 @@ Note that I used carer_group_i and address_group_i to check covariate balance. I
 
 ```{r}
 df$treatment = as.integer(df$treatment)
-df$sms = as.integer(df$treatment)
+df$sms = as.integer(df$sms)
 
 # check covariant balance in the no phone group, with respect to treatment
 xBalance(treatment ~ male + drug_count + active_3m + carer_group_i + address_group_i, 
@@ -211,11 +211,11 @@ lm0 = df[,lm(active_in_exp ~ treatment)] # base model
 lm0$vcovCL1 = vcovCL(lm0, cluster = df[, c("address_group")])
 #coeftest(lm0, vcov. = lm0$vcovCL1)
 
-lm1 = df[,lm(active_in_exp ~ treatment + sms + treatment * sms)] # add sms
+lm1 = df[,lm(active_in_exp ~ treatment + sms)] # add sms
 lm1$vcovCL1 = vcovCL(lm1, cluster = df[, c("address_group")])
 #coeftest(lm1, vcov. = lm1$vcovCL1)
 
-lm2 = df[,lm(active_in_exp ~ treatment + sms + phone + treatment * sms)] # add phone
+lm2 = df[,lm(active_in_exp ~ treatment + sms + phone)] # add phone
 lm2$vcovCL1 = vcovCL(lm2, cluster = df[, c("address_group")])
 #coeftest(lm2, vcov. = lm2$vcovCL1)
 
