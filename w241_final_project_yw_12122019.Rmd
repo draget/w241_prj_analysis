@@ -24,12 +24,12 @@ library(RItools)
 ## Loading Data
 
 ```{r,message=FALSE,error=FALSE}
-d = read.csv('~/Desktop/PrelimRESULTS_12122019.csv')
+d = read.csv('~/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv')
 #g1 = read.csv('~/Desktop/group1.csv')
 #g2_sms = read.csv('~/Desktop/group2_SMS.csv')
 #g2_no_sms = read.csv('~/Desktop/group2_NoSMS.csv')
-s_prior = read.csv('~/Desktop/scripts_prior_12122019.csv')
-s_during = read.csv('~/Desktop/scripts_during_12122019.csv')
+s_prior = read.csv('~/w241/prj/w241_prj_analysis/scripts_priorTD.csv')
+s_during = read.csv('~/w241/prj/w241_prj_analysis/scripts_duringTD.csv')
 ```
 
 ## Examine data
@@ -40,7 +40,7 @@ s_during = read.csv('~/Desktop/scripts_during_12122019.csv')
 # # there are duplicated records in the final data set
 # 
 # d[d$UniqueID %in% d$UniqueID[duplicated(d$UniqueID)],]
-# # maybe we should merge the duplicated rows? by summing the drug count? 
+# # maybe we should merge the duplicated rows? by summing the drug count? Desktop
 # 
 # # Join to assignment file
 # df = d[,c('UniqueID','ACTIVE_IN._EXPERIMENT','TREATMENT','EXCLUDE')] %>%

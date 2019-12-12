@@ -1,8 +1,8 @@
 library(lmtest)
 
 
-#d = read.csv("/home/draget/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv")
-d = read.csv("C:\\Users\\uclj\\Downloads\\w241_prj_analysis-master\\PrelimRESULTSTD.csv")
+d = read.csv("/home/draget/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv")
+#d = read.csv("C:\\Users\\uclj\\Downloads\\w241_prj_analysis-master\\PrelimRESULTSTD.csv")
 
 # Get rid of the lines which were not allocated to a treatment/control group.
 d = d[d$TREATMENT != "", ]
