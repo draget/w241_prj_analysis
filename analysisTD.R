@@ -1,4 +1,5 @@
 library(lmtest)
+library(sandwich)
 
 
 d = read.csv("/home/draget/w241/prj/w241_prj_analysis/PrelimRESULTSTD.csv")
@@ -20,6 +21,14 @@ for(i in 1:nrow(d)) {
   if(is.na(d[i, "CARER.GROUP"])) {
     d[i, "CARER.GROUP"] = cg
     cg = cg + 1
+  }
+}
+
+ag = 100
+for(i in 1:nrow(d)) {
+  if(d[i, "Address.GROUP"] == 0) {
+    d[i, "Address.GROUP"] = ag
+    ag = ag + 1
   }
 }
 
@@ -57,12 +66,19 @@ coeftest(lm1)
 
 # No significant result, mixed data.
 lm2 = lm(VOUCHER ~ TREATMENT, data = d)
-coeftest(lm2)
+lm2$vcovCL1 = vcovCL(lm2, cluster = d$Address.GROUP)
+coeftest(lm2, vcov. = lm2$vcovCL1)
 
 # Significant 0.1 level, however it only tells us that there was an estimable uptake rate 
 # for those offered a voucher.
 lm3 = lm(VOUCHER ~ DiscountTreatment, data = d)
-coeftest(lm3)
+lm3$vcovCL1 = vcovCL(lm3, cluster = d$Address.GROUP)
+coeftest(lm3, vcov. = lm3$vcovCL1)
+
+d9 = d[d$DiscountTreatment == TRUE, ]
+lm3_1 = lm(VOUCHER ~ ACTIVE_IN._EXPERIMENT, data = d9)
+lm3_1$vcovCL1 = vcovCL(lm3_1, cluster = d9$Address.GROUP)
+coeftest(lm3_1, vcov. = lm3_1$vcovCL1)
 
 # No significant relationship for activity and treatments.
 lm4 = lm(ACTIVE_IN._EXPERIMENT ~ SMS + DiscountTreatment + SMS*DiscountTreatment, data = d)
